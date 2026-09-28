@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Unity Web Player | My Mini Market</title>
+    <link rel="shortcut icon" href="TemplateData/favicon.ico">
+    <link rel="stylesheet" href="TemplateData/style.css?v=3">
+    <style>
+      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+      html, body { padding: 0; margin: 0; width: 100%; height: 100%; overflow: hidden; background: #58b852; touch-action: none; overscroll-behavior: none; }
+      #unity-container, #unity-container.unity-desktop, #unity-container.unity-mobile {
+        position: fixed !important; top: 0 !important; left: 0 !important;
+        width: 100vw !important; height: 100vh !important; height: 100dvh !important;
+        transform: none !important; overflow: hidden !important;
+      }
+      #unity-container.rotated-90 {
+        width: 100vh !important; width: 100dvh !important; height: 100vw !important;
+        transform-origin: 0 0 !important; transform: translate(100vw, 0) rotate(90deg) !important;
+      }
+      #unity-fullscreen-container { position: relative !important; width: 100% !important; height: 100% !important; overflow: hidden !important; }
+      #unity-canvas { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; display: block !important; background: #58b852; touch-action: none; outline: none; }
+      #unity-footer { display: none !important; }
+      #mobile-joystick-zone { position: absolute; inset: 0; pointer-events: none; z-index: 25; display: none; }
+      #mobile-joystick-zone.visible { display: block !important; }
+      #mobile-joystick-base {
+        position: absolute; width: 112px; height: 112px; margin-left: -56px; margin-top: -56px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(18, 30, 48, 0.30) 0%, rgba(18, 30, 48, 0.56) 100%);
+        border: 3px solid rgba(255, 255, 255, 0.82);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32), inset 0 0 12px rgba(255, 255, 255, 0.20);
+        display: flex; align-items: center; justify-content: center;
+        opacity: 0.92;
+      }
+      #mobile-joystick-base.active {
+        opacity: 1;
+        border-color: rgba(255, 230, 105, 0.98);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.40), 0 0 16px rgba(255, 225, 90, 0.50), inset 0 0 14px rgba(255, 255, 255, 0.28);
+      }
+      .joystick-arrow { position: absolute; width: 0; height: 0; opacity: 0.72; }
+      .joystick-arrow.up { top: 8px; left: 50%; transform: translateX(-50%); border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 8px solid rgba(255, 255, 255, 0.9); }
+      .joystick-arrow.down { bottom: 8px; left: 50%; transform: translateX(-50%); border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 8px solid rgba(255, 255, 255, 0.9); }
+      .joystick-arrow.left { left: 8px; top: 50%; transform: translateY(-50%); border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-right: 8px solid rgba(255, 255, 255, 0.9); }
+      .joystick-arrow.right { right: 8px; top: 50%; transform: translateY(-50%); border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-left: 8px solid rgba(255, 255, 255, 0.9); }
+      #mobile-joystick-knob {
+        width: 48px; height: 48px; border-radius: 50%;
+        background: radial-gradient(circle at 35% 32%, #ffffff 0%, #e4f2ff 55%, #a8cdf0 100%);
+        border: 2.5px solid rgba(255, 255, 255, 0.96);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.38), inset 0 -3px 6px rgba(30, 70, 110, 0.28);
+        transform: translate3d(0px, 0px, 0px);
+      }
+      #mobile-joystick-base.active #mobile-joystick-knob {
+        background: radial-gradient(circle at 35% 32%, #ffffff 0%, #fff4c2 58%, #f7cb4d 100%);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="unity-container" class="unity-desktop">
+      <div id="unity-fullscreen-container">
+        <canvas id="unity-canvas" width="960" height="600" tabindex="-1"></canvas>
+        <div id="mobile-joystick-zone">
+          <div id="mobile-joystick-base">
+            <span class="joystick-arrow up"></span>
+            <span class="joystick-arrow down"></span>
+            <span class="joystick-arrow left"></span>
+            <span class="joystick-arrow right"></span>
+            <div id="mobile-joystick-knob"></div>
+          </div>
+        </div>
+        <div id="unity-loading-container">
+          <div id="unity-loading-bar">
+            <div id="unity-logo"></div>
+            <div id="unity-progress-bar-empty">
+              <div id="unity-progress-bar-full"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="unity-warning"> </div>
+      <div id="unity-footer">
+        <div id="unity-logo-title-footer"></div>
+        <div id="unity-fullscreen-button"></div>
+        <div id="unity-build-title">My Mini Market</div>
+      </div>
+    </div>
+    <script>
+      (function() {
+        const origError = console.error;
+        console.error = function(...args) {
+          if (args.length > 0 && typeof args[0] === 'string' && args[0].includes("Can't add component because class")) {
+            return;
+          }
+          return origError.apply(console, args);
+        };
+
+        // Disable in-game background music while keeping short sound effects
+        if (typeof AudioBufferSourceNode !== 'undefined') {
+          const origAudioStart = AudioBufferSourceNode.prototype.start;
+          AudioBufferSourceNode.prototype.start = function(...args) {
+            if (this.loop || (this.buffer && this.buffer.duration > 1.5)) {
+              return;
+            }
+            return origAudioStart.apply(this, args);
+          };
+          const loopDesc = Object.getOwnPropertyDescriptor(AudioBufferSourceNode.prototype, 'loop');
+          if (loopDesc && loopDesc.set) {
+            Object.defineProperty(AudioBufferSourceNode.prototype, 'loop', {
+              configurable: true,
+              enumerable: true,
+              get: loopDesc.get,
+              set: function(val) {
+                loopDesc.set.call(this, val);
+                if (val) {
+                  try { this.stop(); } catch (e) {}
+                  try { this.disconnect(); } catch (e) {}
+                }
+              }
+            });
+          }
+        }
+
+        const origGetContext = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function(type, attrs) {
+          const gl = origGetContext.call(this, type, attrs);
+          if (gl && type === 'webgl2' && !gl.__shadowPatched) {
+            gl.__shadowPatched = true;
+            const canvasEl = this;
+            const shadowTextures = new WeakSet();
+            const bound2D = new Array(32).fill(null);
+            let activeUnit = 0;
+
+            const scaleDim = (w, h) => {
+              if (w === 1024 && h === 1024) return [4096, 4096, 4];
+              const expectedW = Math.round(canvasEl.width * 0.8);
+              const expectedH = Math.round(canvasEl.height * 0.8);
+              if (expectedW > 64 && Math.abs(w - expectedW) <= 2 && Math.abs(h - expectedH) <= 2) {
+                return [w * 2, h * 2, 2];
+              }
+              return null;
+            };
+
+            const origTexStorage2D = gl.texStorage2D.bind(gl);
+            gl.texStorage2D = function(target, levels, internalformat, width, height) {
+              const s = (target === gl.TEXTURE_2D && levels === 1) ? scaleDim(width, height) : null;
+              if (s) {
+                return origTexStorage2D(target, levels, internalformat, s[0], s[1]);
+              }
+              return origTexStorage2D(target, levels, internalformat, width, height);
+            };
+
+            const origRenderbufferStorage = gl.renderbufferStorage.bind(gl);
+            gl.renderbufferStorage = function(target, internalformat, width, height) {
+              const s = scaleDim(width, height);
+              if (s) {
+                return origRenderbufferStorage(target, internalformat, s[0], s[1]);
+              }
+              return origRenderbufferStorage(target, internalformat, width, height);
+            };
+
+            const origRenderbufferStorageMultisample = gl.renderbufferStorageMultisample.bind(gl);
+            gl.renderbufferStorageMultisample = function(target, samples, internalformat, width, height) {
+              const s = scaleDim(width, height);
+              if (s) {
+                return origRenderbufferStorageMultisample(target, samples, internalformat, s[0], s[1]);
+              }
+              return origRenderbufferStorageMultisample(target, samples, internalformat, width, height);
+            };
+
+            let lastVP = [0, 0, 0, 0];
+            const origViewport = gl.viewport.bind(gl);
+            gl.viewport = function(x, y, w, h) {
+              lastVP = [x, y, w, h];
+              const s = scaleDim(w, h);
+              if (s) {
+                return origViewport(x * s[2], y * s[2], s[0], s[1]);
+              }
+              return origViewport(x, y, w, h);
+            };
+
+            const origScissor = gl.scissor.bind(gl);
+            gl.scissor = function(x, y, w, h) {
+              const s = scaleDim(w, h);
+              if (s) {
+                return origScissor(x * s[2], y * s[2], s[0], s[1]);
+              }
+              return origScissor(x, y, w, h);
+            };
+
+            let camX = 0;
+            let camZ = -20.5;
+
+            const origDrawArrays = gl.drawArrays.bind(gl);
+            gl.drawArrays = function(mode, first, count) {
+              const cw = canvasEl.width;
+              const ch = canvasEl.height;
+              if (count === 3 && lastVP[0] === 0 && lastVP[1] === 0 && lastVP[2] === cw && lastVP[3] === ch) {
+                const aspect = cw / Math.max(1, ch);
+                const zoomX = Math.min(1.94, Math.max(1.34, aspect * 0.88));
+                const zoomY = Math.min(1.54, Math.max(1.28, aspect * 0.71));
+                const xShift = aspect > 1.7 ? 0.038 : 0.025;
+                const yShift = aspect > 1.7 ? 0.145 : 0.12;
+                const zw = Math.round(cw * zoomX);
+                const zh = Math.round(ch * zoomY);
+                const panOffsetX = Math.round(camX * 0.015 * zw);
+                const panOffsetY = Math.round((camZ + 20.5) * 0.016 * zh);
+                const zx = Math.round((cw - zw) * 0.5 + cw * xShift + panOffsetX);
+                const zy = Math.round((ch - zh) * 0.5 - ch * yShift + panOffsetY);
+                origViewport(zx, zy, zw, zh);
+                const res = origDrawArrays(mode, first, count);
+                origViewport(0, 0, cw, ch);
+                return res;
+              }
+              return origDrawArrays(mode, first, count);
+            };
+
+            const shadowBiasLocs = new WeakSet();
+            const origGetUniformLocation = gl.getUniformLocation.bind(gl);
+            gl.getUniformLocation = function(prog, name) {
+              const loc = origGetUniformLocation(prog, name);
+              if (loc && name === '_ShadowBias') {
+                shadowBiasLocs.add(loc);
+              }
+              return loc;
+            };
+
+            const origUniform4fv = gl.uniform4fv.bind(gl);
+            gl.uniform4fv = function(loc, v, srcOffset, srcLength) {
+              if (v) {
+                const off = srcOffset || 0;
+                const len = srcLength || (v.length - off);
+                if (len === 16 && v[off] === 10000 && v[off + 5] === 10000) {
+                  camX = v[off + 12];
+                  camZ = v[off + 14];
+                }
+                if (loc && shadowBiasLocs.has(loc) && len >= 4) {
+                  const copy = new Float32Array([v[off] * 0.45, v[off + 1] * 0.25, v[off + 2], v[off + 3]]);
+                  return origUniform4fv(loc, copy);
+                }
+              }
+              return origUniform4fv(loc, v, srcOffset, srcLength);
+            };
+
+            const origUniform4f = gl.uniform4f.bind(gl);
+            gl.uniform4f = function(loc, x, y, z, w) {
+              if (loc && shadowBiasLocs.has(loc)) {
+                return origUniform4f(loc, x * 0.45, y * 0.25, z, w);
+              }
+              return origUniform4f(loc, x, y, z, w);
+            };
+
+            const origActiveTexture = gl.activeTexture.bind(gl);
+            gl.activeTexture = function(texture) {
+              activeUnit = texture - gl.TEXTURE0;
+              return origActiveTexture(texture);
+            };
+
+            const origBindTexture = gl.bindTexture.bind(gl);
+            gl.bindTexture = function(target, texture) {
+              if (target === gl.TEXTURE_2D && activeUnit >= 0 && activeUnit < 32) {
+                bound2D[activeUnit] = texture;
+              }
+              return origBindTexture(target, texture);
+            };
+
+            const origTexParameteri = gl.texParameteri.bind(gl);
+            gl.texParameteri = function(target, pname, param) {
+              if (target === gl.TEXTURE_2D && pname === gl.TEXTURE_COMPARE_MODE && bound2D[activeUnit]) {
+                if (param === gl.COMPARE_REF_TO_TEXTURE) {
+                  shadowTextures.add(bound2D[activeUnit]);
+                } else {
+                  shadowTextures.delete(bound2D[activeUnit]);
+                }
+              }
+              return origTexParameteri(target, pname, param);
+            };
+
+            const prevTex0 = bound2D[activeUnit];
+            const fallbackShadowTex = gl.createTexture();
+            origBindTexture(gl.TEXTURE_2D, fallbackShadowTex);
+            gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, 2, 2);
+            origTexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            origTexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            origTexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            origTexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            origTexParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
+            origTexParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
+            shadowTextures.add(fallbackShadowTex);
+            origBindTexture(gl.TEXTURE_2D, prevTex0);
+
+            const shadowUnitsByProg = new WeakMap();
+            let currentProg = null;
+            const origUseProgram = gl.useProgram.bind(gl);
+            gl.useProgram = function(prog) {
+              currentProg = prog;
+              return origUseProgram(prog);
+            };
+
+            const ensureShadowSamplersValid = () => {
+              if (!currentProg) return;
+              let shadowUnits = shadowUnitsByProg.get(currentProg);
+              if (shadowUnits === undefined) {
+                shadowUnits = [];
+                const count = gl.getProgramParameter(currentProg, gl.ACTIVE_UNIFORMS) || 0;
+                for (let i = 0; i < count; i++) {
+                  const u = gl.getActiveUniform(currentProg, i);
+                  if (u && u.type === gl.SAMPLER_2D_SHADOW) {
+                    const loc = gl.getUniformLocation(currentProg, u.name);
+                    if (loc) {
+                      const unit = gl.getUniform(currentProg, loc);
+                      if (typeof unit === 'number' && unit >= 0 && unit < 32) {
+                        shadowUnits.push(unit);
+                      }
+                    }
+                  }
+                }
+                shadowUnitsByProg.set(currentProg, shadowUnits);
+              }
+              if (shadowUnits.length === 0) return;
+              const prevUnit = activeUnit;
+              let changedUnit = false;
+              const replacementTex = (bound2D[5] && shadowTextures.has(bound2D[5])) ? bound2D[5] : fallbackShadowTex;
+              for (let i = 0; i < shadowUnits.length; i++) {
+                const unit = shadowUnits[i];
+                if (!shadowTextures.has(bound2D[unit])) {
+                  origActiveTexture(gl.TEXTURE0 + unit);
+                  origBindTexture(gl.TEXTURE_2D, replacementTex);
+                  bound2D[unit] = replacementTex;
+                  changedUnit = true;
+                }
+              }
+              if (changedUnit) {
+                origActiveTexture(gl.TEXTURE0 + prevUnit);
+              }
+            };
+
+            const origDrawElements = gl.drawElements.bind(gl);
+            gl.drawElements = function(mode, count, type, offset) {
+              ensureShadowSamplersValid();
+              return origDrawElements(mode, count, type, offset);
+            };
+
+            const origDrawElementsInstanced = gl.drawElementsInstanced.bind(gl);
+            gl.drawElementsInstanced = function(mode, count, type, offset, instanceCount) {
+              ensureShadowSamplersValid();
+              return origDrawElementsInstanced(mode, count, type, offset, instanceCount);
+            };
+          }
+          return gl;
+        };
+      })();
+
+      let canvas = document.querySelector("#unity-canvas");
+      let container = document.querySelector("#unity-container");
+      let fullscreenContainer = document.querySelector("#unity-fullscreen-container");
+      let joystickZone = document.querySelector("#mobile-joystick-zone");
+      let joystickBase = document.querySelector("#mobile-joystick-base");
+      let joystickKnob = document.querySelector("#mobile-joystick-knob");
+
+      function isRotated90() {
+        return window.innerWidth < window.innerHeight && window.innerWidth < 650;
+      }
+
+      function isMobileOrTablet() {
+        const ua = navigator.userAgent || "";
+        if (/iPhone|iPad|iPod|Android|Mobile|Tablet|Silk|Kindle|PlayBook/i.test(ua)) return true;
+        if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) return true;
+        const minDim = Math.min(window.innerWidth, window.innerHeight);
+        const maxDim = Math.max(window.innerWidth, window.innerHeight);
+        return minDim <= 560 || (maxDim <= 1024 && minDim <= 768);
+      }
+      window.__isMobileOrTablet = isMobileOrTablet;
+
+      function getGameSize() {
+        if (isRotated90()) {
+          return { width: window.innerHeight, height: window.innerWidth };
+        }
+        return { width: window.innerWidth, height: window.innerHeight };
+      }
+
+      function mapViewportToGame(clientX, clientY) {
+        if (isRotated90()) {
+          return {
+            x: clientY,
+            y: window.innerWidth - clientX
+          };
+        }
+        return { x: clientX, y: clientY };
+      }
+
+      // Override canvas.getBoundingClientRect so Unity always sees the landscape dimensions when rotated 90 degrees
+      const origGetBoundingClientRect = canvas.getBoundingClientRect.bind(canvas);
+      canvas.getBoundingClientRect = function() {
+        if (isRotated90()) {
+          const w = window.innerHeight;
+          const h = window.innerWidth;
+          return {
+            left: 0,
+            top: 0,
+            right: w,
+            bottom: h,
+            width: w,
+            height: h,
+            x: 0,
+            y: 0,
+            toJSON() { return this; }
+          };
+        }
+        return origGetBoundingClientRect();
+      };
+
+      // Remap mouse events in capture phase when rotated 90 degrees so Unity receives landscape coordinates
+      const remapMouseCoordIfNeeded = (e) => {
+        if (!isRotated90() || e.__remapped90) return;
+        const mapped = mapViewportToGame(e.clientX, e.clientY);
+        e.__remapped90 = true;
+        try {
+          Object.defineProperty(e, "clientX", { value: mapped.x, configurable: true });
+          Object.defineProperty(e, "clientY", { value: mapped.y, configurable: true });
+          Object.defineProperty(e, "pageX", { value: mapped.x, configurable: true });
+          Object.defineProperty(e, "pageY", { value: mapped.y, configurable: true });
+        } catch (err) {}
+      };
+
+      ["mousedown", "mousemove", "mouseup", "click", "pointerdown", "pointermove", "pointerup"].forEach((evtName) => {
+        window.addEventListener(evtName, remapMouseCoordIfNeeded, true);
+      });
+
+      // Floating Joystick State & Logic
+      const maxJoystickRadius = 42;
+      let joyActive = false;
+      let joyStart = { x: 0, y: 0 };
+      let joyCurrent = { x: 0, y: 0 };
+
+      function getHomeJoystickPos() {
+        const sz = getGameSize();
+        return {
+          x: Math.max(160, sz.width - 96),
+          y: Math.max(110, sz.height - 78)
+        };
+      }
+
+      function renderJoystick() {
+        if (!joystickZone || !joystickBase || !joystickKnob) return;
+        const showJoy = isMobileOrTablet() || joyActive;
+        joystickZone.classList.toggle("visible", showJoy);
+        if (!showJoy) return;
+
+        if (joyActive) {
+          joystickBase.classList.add("active");
+          joystickBase.style.left = joyStart.x + "px";
+          joystickBase.style.top = joyStart.y + "px";
+          const dx = joyCurrent.x - joyStart.x;
+          const dy = joyCurrent.y - joyStart.y;
+          const dist = Math.hypot(dx, dy);
+          const scale = dist > maxJoystickRadius ? (maxJoystickRadius / dist) : 1;
+          const kx = Math.round(dx * scale);
+          const ky = Math.round(dy * scale);
+          joystickKnob.style.transform = `translate3d(${kx}px, ${ky}px, 0px)`;
+        } else {
+          const home = getHomeJoystickPos();
+          joystickBase.classList.remove("active");
+          joystickBase.style.left = home.x + "px";
+          joystickBase.style.top = home.y + "px";
+          joystickKnob.style.transform = "translate3d(0px, 0px, 0px)";
+        }
+      }
+
+      function isOverLeftHUD(gameX, gameY) {
+        const sz = getGameSize();
+        // LeftSidebar (TOTAL $150 + UPGRADE button) sits on the left edge
+        if (gameX <= 100 && gameY >= sz.height * 0.22 && gameY <= sz.height * 0.80) {
+          return true;
+        }
+        return false;
+      }
+
+      function updateResponsiveLayout() {
+        const rot90 = isRotated90();
+        container.classList.toggle("rotated-90", rot90);
+        container.classList.toggle("unity-mobile", isMobileOrTablet());
+        canvas.classList.toggle("unity-mobile", isMobileOrTablet());
+        renderJoystick();
+      }
+
+      window.addEventListener("resize", updateResponsiveLayout);
+      window.addEventListener("orientationchange", () => {
+        setTimeout(updateResponsiveLayout, 50);
+      });
+
+      // Mouse drag listeners for Floating Joystick
+      window.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        const gx = e.clientX;
+        const gy = e.clientY;
+        if (isOverLeftHUD(gx, gy)) return;
+        if (isMobileOrTablet()) {
+          joyActive = true;
+          joyStart = { x: gx, y: gy };
+          joyCurrent = { x: gx, y: gy };
+          renderJoystick();
+        }
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        if (!joyActive) return;
+        joyCurrent = { x: e.clientX, y: e.clientY };
+        renderJoystick();
+      });
+
+      window.addEventListener("mouseup", () => {
+        if (!joyActive) return;
+        joyActive = false;
+        renderJoystick();
+      });
+
+      // Touch listeners for Floating Joystick + synthetic mouse events for Unity WebGL
+      let activeTouchId = null;
+      function dispatchSyntheticMouse(type, rawClientX, rawClientY, buttons) {
+        const ev = new MouseEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          clientX: rawClientX,
+          clientY: rawClientY,
+          screenX: rawClientX,
+          screenY: rawClientY,
+          button: 0,
+          buttons: buttons
+        });
+        canvas.dispatchEvent(ev);
+      }
+
+      canvas.addEventListener("touchstart", (e) => {
+        if (screen.orientation && screen.orientation.lock) {
+          screen.orientation.lock("landscape").catch(() => {});
+        }
+        if (activeTouchId !== null || e.changedTouches.length === 0) return;
+        const t = e.changedTouches[0];
+        activeTouchId = t.identifier;
+        const mapped = mapViewportToGame(t.clientX, t.clientY);
+        if (!isOverLeftHUD(mapped.x, mapped.y)) {
+          joyActive = true;
+          joyStart = { x: mapped.x, y: mapped.y };
+          joyCurrent = { x: mapped.x, y: mapped.y };
+          renderJoystick();
+        }
+        dispatchSyntheticMouse("mousemove", t.clientX, t.clientY, 1);
+        dispatchSyntheticMouse("mousedown", t.clientX, t.clientY, 1);
+      }, { passive: true });
+
+      canvas.addEventListener("touchmove", (e) => {
+        if (activeTouchId === null) return;
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const t = e.changedTouches[i];
+          if (t.identifier === activeTouchId) {
+            const mapped = mapViewportToGame(t.clientX, t.clientY);
+            if (joyActive) {
+              joyCurrent = { x: mapped.x, y: mapped.y };
+              renderJoystick();
+            }
+            dispatchSyntheticMouse("mousemove", t.clientX, t.clientY, 1);
+            break;
+          }
+        }
+      }, { passive: true });
+
+      const endTouch = (e) => {
+        if (activeTouchId === null) return;
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const t = e.changedTouches[i];
+          if (t.identifier === activeTouchId) {
+            activeTouchId = null;
+            joyActive = false;
+            renderJoystick();
+            dispatchSyntheticMouse("mouseup", t.clientX, t.clientY, 0);
+            break;
+          }
+        }
+      };
+      canvas.addEventListener("touchend", endTouch, { passive: true });
+      canvas.addEventListener("touchcancel", endTouch, { passive: true });
+
+      updateResponsiveLayout();
+
+      function unityShowBanner(msg, type) {
+        var warningBanner = document.querySelector("#unity-warning");
+        function updateBannerVisibility() {
+          warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
+        }
+        var div = document.createElement('div');
+        div.innerHTML = msg;
+        warningBanner.appendChild(div);
+        if (type == 'error') div.style = 'background: red; padding: 10px;';
+        else {
+          if (type == 'warning') div.style = 'background: yellow; padding: 10px;';
+          setTimeout(function() {
+            warningBanner.removeChild(div);
+            updateBannerVisibility();
+          }, 5000);
+        }
+        updateBannerVisibility();
+      }
+
+      var buildUrl = "Build";
+      var loaderUrl = buildUrl + "/WebGL.loader.js";
+      var config = {
+        arguments: [],
+        dataUrl: buildUrl + "/WebGL.data",
+        frameworkUrl: buildUrl + "/WebGL.framework.js",
+        codeUrl: buildUrl + "/WebGL.wasm",
+        streamingAssetsUrl: "StreamingAssets",
+        fullscreenElementID: "unity-fullscreen-container",
+        companyName: "DefaultCompany",
+        productName: "My Mini Market",
+        productVersion: "0.1.0",
+        showBanner: unityShowBanner
+      };
+
+      var script = document.createElement("script");
+      script.src = loaderUrl;
+      script.onload = () => {
+        const loadingContainer = document.querySelector("#unity-loading-container");
+        const progressBarFull = document.querySelector("#unity-progress-bar-full");
+
+        createUnityInstance(canvas, config, (progress) => {
+          if (progress < 1) {
+            loadingContainer.style.display = "block";
+            progressBarFull.style.width = 100 * progress + "%";
+          } else {
+            loadingContainer.style.display = "none";
+          }
+        }).then((unityInstance) => {
+          window.__unityInstance = unityInstance;
+          updateResponsiveLayout();
+          const fsBtn = document.querySelector("#unity-fullscreen-button");
+          if (fsBtn) {
+            fsBtn.onclick = () => {
+              unityInstance.SetFullscreen(1);
+            };
+          }
+        }).catch((message) => {
+          alert(message);
+        });
+      };
+
+      document.body.appendChild(script);
+    </script>
+  </body>
+</html>

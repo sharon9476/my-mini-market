@@ -1,0 +1,36 @@
+# Netlify Custom Headers for Unity WebGL
+/*.wasm
+  Content-Type: application/wasm
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.js
+  Content-Type: application/javascript
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.data
+  Content-Type: application/octet-stream
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.wasm.br
+  Content-Encoding: br
+  Content-Type: application/wasm
+
+/*.js.br
+  Content-Encoding: br
+  Content-Type: application/javascript
+
+/*.data.br
+  Content-Encoding: br
+  Content-Type: application/octet-stream
+
+/*.wasm.gz
+  Content-Encoding: gzip
+  Content-Type: application/wasm
+
+/*.js.gz
+  Content-Encoding: gzip
+  Content-Type: application/javascript
+
+/*.data.gz
+  Content-Encoding: gzip
+  Content-Type: application/octet-stream
