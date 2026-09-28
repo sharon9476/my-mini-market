@@ -190,33 +190,6 @@
               return origScissor(x, y, w, h);
             };
 
-            let camX = 0;
-            let camZ = -20.5;
-
-            const origDrawArrays = gl.drawArrays.bind(gl);
-            gl.drawArrays = function(mode, first, count) {
-              const cw = canvasEl.width;
-              const ch = canvasEl.height;
-              if (count === 3 && lastVP[0] === 0 && lastVP[1] === 0 && lastVP[2] === cw && lastVP[3] === ch) {
-                const aspect = cw / Math.max(1, ch);
-                const zoomX = Math.min(1.94, Math.max(1.34, aspect * 0.88));
-                const zoomY = Math.min(1.54, Math.max(1.28, aspect * 0.71));
-                const xShift = aspect > 1.7 ? 0.038 : 0.025;
-                const yShift = aspect > 1.7 ? 0.145 : 0.12;
-                const zw = Math.round(cw * zoomX);
-                const zh = Math.round(ch * zoomY);
-                const panOffsetX = Math.round(camX * 0.015 * zw);
-                const panOffsetY = Math.round((camZ + 20.5) * 0.016 * zh);
-                const zx = Math.round((cw - zw) * 0.5 + cw * xShift + panOffsetX);
-                const zy = Math.round((ch - zh) * 0.5 - ch * yShift + panOffsetY);
-                origViewport(zx, zy, zw, zh);
-                const res = origDrawArrays(mode, first, count);
-                origViewport(0, 0, cw, ch);
-                return res;
-              }
-              return origDrawArrays(mode, first, count);
-            };
-
             const shadowBiasLocs = new WeakSet();
             const origGetUniformLocation = gl.getUniformLocation.bind(gl);
             gl.getUniformLocation = function(prog, name) {
@@ -232,10 +205,6 @@
               if (v) {
                 const off = srcOffset || 0;
                 const len = srcLength || (v.length - off);
-                if (len === 16 && v[off] === 10000 && v[off + 5] === 10000) {
-                  camX = v[off + 12];
-                  camZ = v[off + 14];
-                }
                 if (loc && shadowBiasLocs.has(loc) && len >= 4) {
                   const copy = new Float32Array([v[off] * 0.45, v[off + 1] * 0.25, v[off + 2], v[off + 3]]);
                   return origUniform4fv(loc, copy);
@@ -434,6 +403,17 @@
       let joyActive = false;
       let joyStart = { x: 0, y: 0 };
       let joyCurrent = { x: 0, y: 0 };
+      let lastSentJoy = "0.0000,0.0000";
+
+      function sendJoystickToUnity(jx, jy) {
+        if (!window.__unityInstance || typeof window.__unityInstance.SendMessage !== "function") return;
+        const payload = `${jx.toFixed(4)},${jy.toFixed(4)}`;
+        if (payload === lastSentJoy) return;
+        lastSentJoy = payload;
+        try {
+          window.__unityInstance.SendMessage("Player", "SetMobileJoystickInput", payload);
+        } catch (e) {}
+      }
 
       function getHomeJoystickPos() {
         const sz = getGameSize();
@@ -447,25 +427,27 @@
         if (!joystickZone || !joystickBase || !joystickKnob) return;
         const showJoy = isMobileOrTablet() || joyActive;
         joystickZone.classList.toggle("visible", showJoy);
-        if (!showJoy) return;
 
-        if (joyActive) {
+        const dx = joyCurrent.x - joyStart.x;
+        const dy = joyCurrent.y - joyStart.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (joyActive && dist > 6) {
           joystickBase.classList.add("active");
           joystickBase.style.left = joyStart.x + "px";
           joystickBase.style.top = joyStart.y + "px";
-          const dx = joyCurrent.x - joyStart.x;
-          const dy = joyCurrent.y - joyStart.y;
-          const dist = Math.hypot(dx, dy);
           const scale = dist > maxJoystickRadius ? (maxJoystickRadius / dist) : 1;
-          const kx = Math.round(dx * scale);
-          const ky = Math.round(dy * scale);
-          joystickKnob.style.transform = `translate3d(${kx}px, ${ky}px, 0px)`;
+          const kx = dx * scale;
+          const ky = dy * scale;
+          joystickKnob.style.transform = `translate3d(${Math.round(kx)}px, ${Math.round(ky)}px, 0px)`;
+          sendJoystickToUnity(kx / maxJoystickRadius, -ky / maxJoystickRadius);
         } else {
           const home = getHomeJoystickPos();
           joystickBase.classList.remove("active");
           joystickBase.style.left = home.x + "px";
           joystickBase.style.top = home.y + "px";
           joystickKnob.style.transform = "translate3d(0px, 0px, 0px)";
+          sendJoystickToUnity(0, 0);
         }
       }
 
